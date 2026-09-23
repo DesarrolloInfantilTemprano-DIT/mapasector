@@ -9,12 +9,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   
-  <!-- Leaflet CSS & JS (Google Maps Style OpenSource) -->
+  <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Leaflet Draw (Trazar líneas / Polígonos de búsqueda) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
   <style>
-    #map { height: calc(100vh - 80px); width: 100%; z-index: 1; }
+    #map { height: calc(100vh - 60px); width: 100%; z-index: 1; }
     .loader {
       border-top-color: #2563eb;
       animation: spinner 0.6s linear infinite;
@@ -22,6 +26,29 @@
     @keyframes spinner {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+    .custom-popup .leaflet-popup-content-wrapper {
+      padding: 0;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .custom-popup .leaflet-popup-content {
+      margin: 0;
+      width: 280px !important;
+    }
+    /* Estilo para los tooltips flotantes en las figuras trazadas */
+    .draw-tooltip {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #3b82f6;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 11px;
+      border-radius: 6px;
+      padding: 4px 8px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    .draw-tooltip::before {
+      border-top-color: rgba(15, 23, 42, 0.9);
     }
   </style>
 </head>
@@ -88,6 +115,7 @@
     <option value="933-COMUNIDAD VENADO PAMPA"></option>
     <option value="933-COMUNIDAD YURIMAGUAS"></option>
     <option value="933-SIN SECTOR"></option>
+    <option value="933-OTRO DISTRITO"></option>
   </datalist>
 
   <!-- CABECERA -->
@@ -112,8 +140,8 @@
   <!-- PANEL PRINCIPAL CONTENEDOR (FILTROS + MAPA) -->
   <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
 
-    <!-- PANEL LATERAL DE FILTROS -->
-    <aside class="w-full md:w-80 bg-white border-r border-slate-200 shadow-lg p-4 overflow-y-auto space-y-4 z-20 max-h-[40vh] md:max-h-none">
+    <!-- PANEL LATERAL DE FILTROS Y ESTADÍSTICAS -->
+    <aside class="w-full md:w-80 bg-white border-r border-slate-200 shadow-lg p-4 overflow-y-auto space-y-4 z-20 max-h-[45vh] md:max-h-none">
       <div class="flex justify-between items-center border-b pb-2">
         <h2 class="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
           <i data-lucide="filter" class="w-4 h-4 text-blue-600"></i> Filtros de Búsqueda
@@ -133,13 +161,16 @@
       <!-- FILTRO SECTOR -->
       <div>
         <label for="f_sector" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Sector</label>
-        <input type="text" id="f_sector" list="listaSectores" placeholder="Todos los sectores..." onchange="aplicarFiltros()" oninput="aplicarFiltros()"
-          class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold uppercase focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+        <div class="relative">
+          <input type="text" id="f_sector" placeholder="TODOS LOS SECTORES..." readonly onclick="abrirModalSector()"
+            class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold uppercase focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer pr-8">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute right-2.5 top-2 pointer-events-none"></i>
+        </div>
       </div>
 
-      <!-- FILTRO MANZANA (MZ) -->
+      <!-- FILTRO MANZANA (MZ) - COINCIDENCIA EXACTA -->
       <div>
-        <label for="f_mz" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Manzana (Mz)</label>
+        <label for="f_mz" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Manzana (Mz) [Exacta]</label>
         <input type="text" id="f_mz" placeholder="Ej: 5" oninput="aplicarFiltros()"
           class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none">
       </div>
@@ -154,30 +185,99 @@
       <!-- FILTRO APELLIDOS Y NOMBRES -->
       <div>
         <label for="f_nombre" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Apellidos y Nombres</label>
-        <input type="text" id="f_nombre" placeholder="Buscar por nombre..." oninput="aplicarFiltros()"
+        <input type="text" id="f_nombre" placeholder="BUSCAR POR NOMBRE..." oninput="aplicarFiltros()"
           class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-blue-500 outline-none">
       </div>
 
-      <!-- FILTRO RANGO DE FECHA DE NACIMIENTO -->
+      <!-- FILTRO RANGO DE FECHA DE NACIMIENTO CON MUESTRA DE EDADES CALCULADAS -->
       <div class="bg-blue-50/70 p-3 rounded-lg border border-blue-100 space-y-2">
-        <label class="block text-[11px] font-bold text-blue-900 uppercase">Rango Fecha Nacimiento</label>
+        <div class="flex justify-between items-center">
+          <label class="block text-[11px] font-bold text-blue-900 uppercase">Rango Fecha Nacimiento</label>
+        </div>
         <div>
           <span class="text-[10px] text-slate-500 font-semibold block mb-0.5">Desde:</span>
-          <input type="date" id="f_fn_desde" onchange="aplicarFiltros()"
+          <input type="date" id="f_fn_desde" onchange="actualizarInfoEdad(); aplicarFiltros();"
             class="w-full px-2 py-1 border border-slate-300 rounded text-xs outline-none bg-white">
         </div>
         <div>
           <span class="text-[10px] text-slate-500 font-semibold block mb-0.5">Hasta:</span>
-          <input type="date" id="f_fn_hasta" onchange="aplicarFiltros()"
+          <input type="date" id="f_fn_hasta" onchange="actualizarInfoEdad(); aplicarFiltros();"
             class="w-full px-2 py-1 border border-slate-300 rounded text-xs outline-none bg-white">
         </div>
+
+        <!-- BADGE DINÁMICO DE EDAD -->
+        <div id="badgeEdadEquivalente" class="hidden mt-1.5 p-1.5 bg-blue-600 text-white text-[10px] rounded font-bold text-center flex items-center justify-center gap-1 shadow-sm">
+          <i data-lucide="user-check" class="w-3 h-3"></i>
+          <span id="textoEdadEquivalente">Rango: -</span>
+        </div>
       </div>
+
+      <!-- PANEL DE ESTADÍSTICAS POR GRUPO ETARIO -->
+      <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+        <h3 class="text-xs font-bold text-slate-800 uppercase border-b pb-1 flex items-center justify-between">
+          <span>Estadística Demográfica</span>
+          <span id="stat_total" class="text-blue-700 font-extrabold text-[11px]">0 pers.</span>
+        </h3>
+        <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+          <div class="bg-emerald-50 border border-emerald-200 p-1.5 rounded flex justify-between items-center">
+            <span class="text-emerald-800 font-medium">Niños (&lt;12)</span>
+            <span id="stat_ninos" class="font-bold text-emerald-900">0</span>
+          </div>
+          <div class="bg-teal-50 border border-teal-200 p-1.5 rounded flex justify-between items-center">
+            <span class="text-teal-800 font-medium">Adolesc. (12-17)</span>
+            <span id="stat_adolescentes" class="font-bold text-teal-900">0</span>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 p-1.5 rounded flex justify-between items-center">
+            <span class="text-blue-800 font-medium">Jóvenes (18-29)</span>
+            <span id="stat_jovenes" class="font-bold text-blue-900">0</span>
+          </div>
+          <div class="bg-indigo-50 border border-indigo-200 p-1.5 rounded flex justify-between items-center">
+            <span class="text-indigo-800 font-medium">Adultos (30-59)</span>
+            <span id="stat_adultos" class="font-bold text-indigo-900">0</span>
+          </div>
+          <div class="bg-purple-50 border border-purple-200 p-1.5 rounded flex justify-between items-center col-span-2">
+            <span class="text-purple-800 font-medium">Ancianos (60+)</span>
+            <span id="stat_ancianos" class="font-bold text-purple-900">0</span>
+          </div>
+        </div>
+      </div>
+
     </aside>
 
     <!-- MAPA LEAFLET -->
     <main class="flex-1 relative">
       <div id="map"></div>
     </main>
+  </div>
+
+  <!-- MODAL DE SELECCIÓN DE SECTOR -->
+  <div id="modalSector" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div class="bg-blue-700 text-white p-3.5 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i data-lucide="map-pin" class="w-5 h-5"></i>
+          <h3 class="font-bold text-sm">Seleccionar Sector Registrado</h3>
+        </div>
+        <button onclick="cerrarModalSector()" class="hover:bg-blue-800 p-1 rounded transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-3 border-b bg-slate-50">
+        <input type="text" id="searchSectorInput" placeholder="ESCRIBA PARA BUSCAR SECTOR..." oninput="filtrarListaSectores()"
+          class="w-full px-3 py-2 border border-blue-400 rounded-lg text-xs uppercase font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+      </div>
+      <div id="contenedorListaSectores" class="p-2 overflow-y-auto flex-1 divide-y divide-slate-100">
+        <!-- Opciones generadas por JS -->
+      </div>
+      <div class="p-3 bg-slate-100 border-t flex justify-end gap-2">
+        <button onclick="seleccionarSector('')" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300">
+          TODOS
+        </button>
+        <button onclick="cerrarModalSector()" class="px-4 py-1.5 bg-slate-300 text-slate-800 text-xs font-bold rounded-lg hover:bg-slate-400">
+          CANCELAR
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -187,15 +287,66 @@
     let baseDatos = [];
     let map = null;
     let markersLayer = L.layerGroup();
+    let drawnItems = new L.FeatureGroup();
 
-    // Inicializar Mapa
+    // Cargar opciones de Sectores del Datalist al Modal
+    function initModalSectores() {
+      const datalist = document.getElementById('listaSectores');
+      const opciones = Array.from(datalist.options).map(opt => opt.value);
+      renderSectoresModal(opciones);
+    }
+
+    function renderSectoresModal(lista) {
+      const cont = document.getElementById('contenedorListaSectores');
+      cont.innerHTML = "";
+      if (lista.length === 0) {
+        cont.innerHTML = `<div class="p-4 text-center text-xs text-slate-500 font-semibold">No se encontraron sectores</div>`;
+        return;
+      }
+      lista.forEach(sec => {
+        const div = document.createElement('div');
+        div.className = "flex justify-between items-center p-2.5 hover:bg-blue-50 cursor-pointer rounded transition text-xs font-bold text-slate-700 uppercase";
+        div.innerHTML = `<span>${sec}</span><i data-lucide="chevron-right" class="w-4 h-4 text-blue-600"></i>`;
+        div.onclick = () => seleccionarSector(sec);
+        cont.appendChild(div);
+      });
+      lucide.createIcons();
+    }
+
+    function filtrarListaSectores() {
+      const q = document.getElementById('searchSectorInput').value.trim().toLowerCase();
+      const datalist = document.getElementById('listaSectores');
+      const opciones = Array.from(datalist.options).map(opt => opt.value);
+      const filtradas = opciones.filter(opt => opt.toLowerCase().includes(q));
+      renderSectoresModal(filtradas);
+    }
+
+    function abrirModalSector() {
+      document.getElementById('modalSector').classList.remove('hidden');
+      document.getElementById('searchSectorInput').value = "";
+      filtrarListaSectores();
+      document.getElementById('searchSectorInput').focus();
+    }
+
+    function cerrarModalSector() {
+      document.getElementById('modalSector').classList.add('hidden');
+    }
+
+    function seleccionarSector(valor) {
+      document.getElementById('f_sector').value = valor;
+      cerrarModalSector();
+      aplicarFiltros();
+    }
+
+    // Inicializar Mapa y capas satelitales
     function initMap() {
-      // Coordenadas iniciales por defecto (Castillo Grande / Tingo María)
       map = L.map('map').setView([-9.288639, -76.008830], 14);
 
-      // Capa Satelital ESRI
-      const satelital = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri'
+      // Capa Google Hybrid (Vista HD estilo Google Earth)
+      const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        attribution: '&copy; Google Maps'
       });
 
       // Capa Callejera OpenStreetMap
@@ -203,21 +354,54 @@
         attribution: '&copy; OpenStreetMap contributors'
       });
 
-      callejero.addTo(map);
+      googleHybrid.addTo(map);
 
-      // Control para alternar capas de mapa
       const baseMaps = {
-        "Callejero": callejero,
-        "Satelital": satelital
+        "Satelital HD (Google Earth)": googleHybrid,
+        "Callejero": callejero
       };
+
       L.control.layers(baseMaps).addTo(map);
-
       markersLayer.addTo(map);
+      map.addLayer(drawnItems);
 
+      // Habilitar dibujo de zonas / polígonos
+      const drawControl = new L.Control.Draw({
+        draw: {
+          polygon: true,
+          rectangle: true,
+          circle: true,
+          polyline: false,
+          marker: false,
+          circlemarker: false
+        },
+        edit: {
+          featureGroup: drawnItems,
+          remove: true
+        }
+      });
+      map.addControl(drawControl);
+
+      // Eventos al crear o editar figuras dibujadas
+      map.on(L.Draw.Event.CREATED, function (e) {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        aplicarFiltros();
+      });
+
+      map.on(L.Draw.Event.EDITED, function () {
+        aplicarFiltros();
+      });
+
+      map.on(L.Draw.Event.DELETED, function () {
+        aplicarFiltros();
+      });
+
+      initModalSectores();
       cargarBaseDatos();
     }
 
-    // Cargar todos los registros georreferenciados desde el script
+    // Cargar base de datos
     async function cargarBaseDatos() {
       document.getElementById('badgeConteo').textContent = "Cargando...";
       try {
@@ -236,7 +420,6 @@
       }
     }
 
-    // Convierte formato dd/mm/yyyy a Objeto Date
     function parseFechaPeruana(strFecha) {
       if (!strFecha) return null;
       if (strFecha.includes('-')) {
@@ -250,11 +433,67 @@
       return null;
     }
 
+    function calcularEdad(strFecha) {
+      const fn = parseFechaPeruana(strFecha);
+      if (!fn || isNaN(fn.getTime())) return null;
+      const hoy = new Date();
+      let edad = hoy.getFullYear() - fn.getFullYear();
+      const m = hoy.getMonth() - fn.getMonth();
+      if (m < 0 || (m === 0 && hoy.getDate() < fn.getDate())) {
+        edad--;
+      }
+      return edad;
+    }
+
+    // Muestra qué edades se están filtrando dinámicamente según el rango de fecha seleccionado
+    function actualizarInfoEdad() {
+      const fnDesdeStr = document.getElementById('f_fn_desde').value;
+      const fnHastaStr = document.getElementById('f_fn_hasta').value;
+      const badge = document.getElementById('badgeEdadEquivalente');
+      const texto = document.getElementById('textoEdadEquivalente');
+
+      if (!fnDesdeStr && !fnHastaStr) {
+        badge.classList.add('hidden');
+        return;
+      }
+
+      let edadMin = null;
+      let edadMax = null;
+
+      if (fnHastaStr) {
+        edadMin = calcularEdad(fnHastaStr);
+      }
+      if (fnDesdeStr) {
+        edadMax = calcularEdad(fnDesdeStr);
+      }
+
+      badge.classList.remove('hidden');
+
+      if (edadMin !== null && edadMax !== null) {
+        if (edadMin > edadMax) {
+          const temp = edadMin; edadMin = edadMax; edadMax = temp;
+        }
+        texto.textContent = `Edades filtradas: ${edadMin} a ${edadMax} años`;
+      } else if (edadMin !== null) {
+        texto.textContent = `Edades filtradas: Desde ${edadMin} años`;
+      } else if (edadMax !== null) {
+        texto.textContent = `Edades filtradas: Hasta ${edadMax} años`;
+      }
+      lucide.createIcons();
+    }
+
+    // Normaliza Mz para búsquedas exactas (Ej: "5" coincide con "5", "05" o "MZ 5")
+    function normalizarMz(mzStr) {
+      if (!mzStr) return "";
+      return mzStr.toString().toLowerCase().replace(/mz|\.|\s/g, '').trim();
+    }
+
     // Filtrar y Renderizar los marcadores
     function aplicarFiltros() {
       const ffamiliar = document.getElementById('f_ffamiliar').value.trim().toLowerCase();
       const sector = document.getElementById('f_sector').value.trim().toLowerCase();
-      const mz = document.getElementById('f_mz').value.trim().toLowerCase();
+      const mzInput = document.getElementById('f_mz').value.trim().toLowerCase();
+      const mzNormalizada = normalizarMz(mzInput);
       const dni = document.getElementById('f_dni').value.trim().toLowerCase();
       const nombre = document.getElementById('f_nombre').value.trim().toLowerCase();
 
@@ -269,7 +508,13 @@
       const filtrados = baseDatos.filter(item => {
         if (ffamiliar && (!item.ffamiliar || !item.ffamiliar.toString().toLowerCase().includes(ffamiliar))) return false;
         if (sector && (!item.sector || !item.sector.toString().toLowerCase().includes(sector))) return false;
-        if (mz && (!item.mz || !item.mz.toString().toLowerCase().includes(mz))) return false;
+        
+        // Coincidencia exacta de manzana (Mz)
+        if (mzInput) {
+          const itemMz = normalizarMz(item.mz);
+          if (itemMz !== mzNormalizada) return false;
+        }
+
         if (dni && (!item.dni || !item.dni.toString().toLowerCase().includes(dni))) return false;
         if (nombre && (!item.nombreB || !item.nombreB.toString().toLowerCase().includes(nombre))) return false;
 
@@ -283,19 +528,22 @@
         return true;
       });
 
-      document.getElementById('badgeConteo').textContent = `${filtrados.length} Persona(s) Encontrada(s)`;
+      // Recalcular estadísticas globales
+      actualizarEstadisticas(filtrados);
 
-      // Agrupar integrantes por Coordenadas para mostrar un único Pin por Ficha Familiar
+      // Agrupar integrantes por Coordenadas
       const gruposCoordenadas = {};
 
-      filtrados.forEach(item => {
-        const coords = item.georeferencia.split(',');
-        if (coords.length === 2) {
-          const lat = parseFloat(coords[0].trim());
-          const lng = parseFloat(coords[1].trim());
+      filtrados.forEach((item) => {
+        if (!item.georeferencia) return;
+        const strGeoref = item.georeferencia.toString().replace(/;/g, ',').replace(/\s+/g, '');
+        const coords = strGeoref.split(',');
+        if (coords.length >= 2) {
+          const lat = parseFloat(coords[0].replace(',', '.'));
+          const lng = parseFloat(coords[1].replace(',', '.'));
 
-          if (!isNaN(lat) && !isNaN(lng)) {
-            const key = `${lat},${lng}`;
+          if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
             if (!gruposCoordenadas[key]) {
               gruposCoordenadas[key] = { lat, lng, ffamiliar: item.ffamiliar, integrantes: [] };
             }
@@ -305,43 +553,153 @@
       });
 
       const bounds = [];
+      let totalPersonasEnFigura = 0;
+      let totalPuntosEnFigura = 0;
 
-      // Crear Marcadores
       Object.values(gruposCoordenadas).forEach(grupo => {
+        // Filtrar si existe polígono/dibujo activo
+        if (drawnItems.getLayers().length > 0) {
+          let dentro = false;
+          const pt = L.latLng(grupo.lat, grupo.lng);
+          drawnItems.eachLayer(layer => {
+            if (layer instanceof L.Circle) {
+              if (layer.getLatLng().distanceTo(pt) <= layer.getRadius()) dentro = true;
+            } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+              if (layer.getBounds().contains(pt)) dentro = true;
+            }
+          });
+          if (!dentro) return;
+        }
+
+        totalPuntosEnFigura++;
+        totalPersonasEnFigura += grupo.integrantes.length;
         bounds.push([grupo.lat, grupo.lng]);
 
+        // Estadísticas internas del marcador
+        let countNinos = 0, countAdolescentes = 0, countJovenes = 0, countAdultos = 0, countAncianos = 0;
+
+        grupo.integrantes.forEach(ing => {
+          const edad = calcularEdad(ing.fn);
+          if (edad !== null) {
+            if (edad < 12) countNinos++;
+            else if (edad <= 17) countAdolescentes++;
+            else if (edad <= 29) countJovenes++;
+            else if (edad <= 59) countAdultos++;
+            else countAncianos++;
+          }
+        });
+
         let popupContent = `
-          <div class="p-1 font-sans text-xs max-w-xs">
-            <div class="bg-blue-800 text-white p-2 rounded-t font-bold flex justify-between items-center mb-2">
-              <span>Ficha: ${grupo.ffamiliar || 'S/N'}</span>
-              <span class="text-[10px] bg-blue-900 px-1.5 py-0.5 rounded text-emerald-300">${grupo.integrantes.length} Integrante(s)</span>
+          <div class="custom-popup font-sans text-xs">
+            <div class="bg-blue-800 text-white p-2.5 flex justify-between items-center">
+              <div>
+                <span class="text-[10px] uppercase text-blue-200 block font-bold">Ficha Familiar</span>
+                <span class="font-bold text-sm">${grupo.ffamiliar || 'S/N'}</span>
+              </div>
+              <span class="text-[10px] bg-emerald-500 text-slate-900 font-extrabold px-2 py-0.5 rounded-full">${grupo.integrantes.length} Integrante(s)</span>
             </div>
-            <p class="text-[11px] font-semibold text-slate-700 mb-1"><strong>Sector:</strong> ${grupo.integrantes[0].sector || '-'}</p>
-            <p class="text-[11px] font-semibold text-slate-700 mb-2"><strong>Ref. / Mz:</strong> ${grupo.integrantes[0].ref_direccion || '-'} (Mz ${grupo.integrantes[0].mz || '-'})</p>
-            
-            <div class="border-t pt-2 space-y-2 max-h-48 overflow-y-auto">
+
+            <div class="p-2 bg-slate-100 border-b border-slate-200 text-[10px] text-slate-700">
+              <p><strong>Sector:</strong> ${grupo.integrantes[0].sector || '-'}</p>
+              <p><strong>Ref / Mz:</strong> ${grupo.integrantes[0].ref_direccion || '-'} (Mz ${grupo.integrantes[0].mz || '-'})</p>
+            </div>
+
+            <div class="p-2 bg-blue-50 border-b border-blue-100 text-[10px] grid grid-cols-3 gap-1 text-center font-bold">
+              <span class="text-emerald-700">Niños: ${countNinos}</span>
+              <span class="text-teal-700">Adol: ${countAdolescentes}</span>
+              <span class="text-blue-700">Jóv: ${countJovenes}</span>
+              <span class="text-indigo-700">Adult: ${countAdultos}</span>
+              <span class="text-purple-700 col-span-2">Ancianos (60+): ${countAncianos}</span>
+            </div>
+
+            <div class="p-2 space-y-2 max-h-48 overflow-y-auto">
         `;
 
         grupo.integrantes.forEach(ing => {
+          const edad = calcularEdad(ing.fn);
+          const edadTxt = edad !== null ? `${edad} años` : 'S/I';
+          const tel = ing.telefono ? ing.telefono.toString().trim() : '';
+
           popupContent += `
-            <div class="bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
-              <p class="font-bold text-blue-900 uppercase">${ing.nombreB}</p>
-              <p><strong>DNI:</strong> ${ing.dni} | <strong>F.Nac:</strong> ${ing.fn || '-'}</p>
-              <p><strong>HC:</strong> ${ing.hclinica || '-'} | <strong>Tel:</strong> ${ing.telefono || '-'}</p>
-            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-[11px] space-y-1">
+              <p class="font-bold text-blue-900 uppercase">${ing.nombreB || 'SIN NOMBRE'}</p>
+              <p class="text-slate-600"><strong>DNI:</strong> ${ing.dni || '-'} | <strong>Edad:</strong> ${edadTxt}</p>
+              <p class="text-slate-600"><strong>HC:</strong> ${ing.hclinica || '-'} | <strong>Tel:</strong> ${tel || '-'}</p>
           `;
+
+          if (tel) {
+            popupContent += `
+              <div class="flex gap-1.5 pt-1">
+                <a href="tel:${tel}" class="flex-1 bg-blue-600 text-white text-[10px] font-bold py-1 rounded text-center flex items-center justify-center gap-1 hover:bg-blue-700">
+                  <i data-lucide="phone" class="w-3 h-3"></i> Llamar
+                </a>
+                <a href="https://wa.me/51${tel}" target="_blank" class="flex-1 bg-emerald-600 text-white text-[10px] font-bold py-1 rounded text-center flex items-center justify-center gap-1 hover:bg-emerald-700">
+                  <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
+                </a>
+              </div>
+            `;
+          }
+
+          popupContent += `</div>`;
         });
 
         popupContent += `</div></div>`;
 
         const marker = L.marker([grupo.lat, grupo.lng]).bindPopup(popupContent);
+        marker.on('popupopen', () => lucide.createIcons());
         markersLayer.addLayer(marker);
       });
 
-      // Centrar mapa dinámicamente si hay resultados
+      // Actualizar información dentro de las figuras dibujadas (Radio / Conteo de personas)
+      if (drawnItems.getLayers().length > 0) {
+        drawnItems.eachLayer(layer => {
+          let labelText = "";
+          if (layer instanceof L.Circle) {
+            const radio = layer.getRadius();
+            const radioTxt = radio >= 1000 ? `${(radio / 1000).toFixed(2)} km` : `${Math.round(radio)} m`;
+            labelText = `📍 Radio: ${radioTxt} | 👥 Personas: ${totalPersonasEnFigura} (${totalPuntosEnFigura} familias)`;
+          } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+            labelText = `📐 Zona seleccionada | 👥 Personas: ${totalPersonasEnFigura} (${totalPuntosEnFigura} familias)`;
+          }
+
+          if (labelText) {
+            layer.unbindTooltip();
+            layer.bindTooltip(labelText, {
+              permanent: true,
+              direction: 'top',
+              className: 'draw-tooltip'
+            }).openTooltip();
+          }
+        });
+      }
+
+      document.getElementById('badgeConteo').textContent = `${filtrados.length} Persona(s) (${bounds.length} Puntos)`;
+
       if (bounds.length > 0) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
       }
+    }
+
+    function actualizarEstadisticas(lista) {
+      let ninos = 0, adolescentes = 0, jovenes = 0, adultos = 0, ancianos = 0;
+
+      lista.forEach(item => {
+        const edad = calcularEdad(item.fn);
+        if (edad !== null) {
+          if (edad < 12) ninos++;
+          else if (edad <= 17) adolescentes++;
+          else if (edad <= 29) jovenes++;
+          else if (edad <= 59) adultos++;
+          else ancianos++;
+        }
+      });
+
+      document.getElementById('stat_total').textContent = `${lista.length} pers.`;
+      document.getElementById('stat_ninos').textContent = ninos;
+      document.getElementById('stat_adolescentes').textContent = adolescentes;
+      document.getElementById('stat_jovenes').textContent = jovenes;
+      document.getElementById('stat_adultos').textContent = adultos;
+      document.getElementById('stat_ancianos').textContent = ancianos;
     }
 
     function limpiarFiltros() {
@@ -352,6 +710,8 @@
       document.getElementById('f_nombre').value = "";
       document.getElementById('f_fn_desde').value = "";
       document.getElementById('f_fn_hasta').value = "";
+      document.getElementById('badgeEdadEquivalente').classList.add('hidden');
+      drawnItems.clearLayers();
       aplicarFiltros();
     }
 
