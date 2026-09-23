@@ -36,7 +36,6 @@
       margin: 0;
       width: 280px !important;
     }
-    /* Estilo para los tooltips flotantes en las figuras trazadas */
     .draw-tooltip {
       background: rgba(15, 23, 42, 0.9);
       border: 1px solid #3b82f6;
@@ -115,12 +114,14 @@
     <option value="933-COMUNIDAD VENADO PAMPA"></option>
     <option value="933-COMUNIDAD YURIMAGUAS"></option>
     <option value="933-SIN SECTOR"></option>
-    <option value="933-OTRO DISTRITO"></option>
   </datalist>
 
   <!-- CABECERA -->
   <header class="bg-blue-800 text-white shadow-md z-10 px-4 py-3 flex justify-between items-center h-[60px]">
     <div class="flex items-center space-x-3">
+      <button onclick="togglePanelFiltros()" title="Mostrar/Ocultar Filtros" class="p-1.5 bg-blue-700 hover:bg-blue-600 rounded-lg transition text-white flex items-center justify-center">
+        <i data-lucide="panel-left-close" id="iconTogglePanel" class="w-5 h-5"></i>
+      </button>
       <i data-lucide="map-pin" class="w-6 h-6 text-emerald-400"></i>
       <div>
         <h1 class="text-base font-bold leading-tight">SIGIS_FED - Mapa de Georreferenciación</h1>
@@ -140,15 +141,26 @@
   <!-- PANEL PRINCIPAL CONTENEDOR (FILTROS + MAPA) -->
   <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
 
+    <!-- BOTÓN FLOTANTE PARA REABRIR PANEL CUANDO ESTÁ OCULTO -->
+    <button id="btnAbrirPanelFlotante" onclick="togglePanelFiltros()" class="hidden absolute top-3 left-3 z-30 bg-blue-800 text-white p-2 rounded-lg shadow-xl hover:bg-blue-700 transition flex items-center gap-1.5 text-xs font-bold border border-blue-600">
+      <i data-lucide="filter" class="w-4 h-4 text-emerald-400"></i>
+      <span>Filtros</span>
+    </button>
+
     <!-- PANEL LATERAL DE FILTROS Y ESTADÍSTICAS -->
-    <aside class="w-full md:w-80 bg-white border-r border-slate-200 shadow-lg p-4 overflow-y-auto space-y-4 z-20 max-h-[45vh] md:max-h-none">
+    <aside id="panelFiltros" class="w-full md:w-80 bg-white border-r border-slate-200 shadow-lg p-4 overflow-y-auto space-y-4 z-20 max-h-[45vh] md:max-h-none transition-all duration-300 ease-in-out">
       <div class="flex justify-between items-center border-b pb-2">
         <h2 class="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
           <i data-lucide="filter" class="w-4 h-4 text-blue-600"></i> Filtros de Búsqueda
         </h2>
-        <button onclick="limpiarFiltros()" class="text-[11px] text-blue-600 hover:underline font-semibold">
-          Limpiar Filtros
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="limpiarFiltros()" class="text-[11px] text-blue-600 hover:underline font-semibold">
+            Limpiar Filtros
+          </button>
+          <button onclick="togglePanelFiltros()" title="Ocultar Panel" class="text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
       </div>
 
       <!-- FILTRO FICHA FAMILIAR -->
@@ -158,20 +170,20 @@
           class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase focus:ring-2 focus:ring-blue-500 outline-none">
       </div>
 
-      <!-- FILTRO SECTOR -->
+      <!-- FILTRO SECTOR (MÚLTIPLE) -->
       <div>
-        <label for="f_sector" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Sector</label>
+        <label for="f_sector" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Sector(es) Múltiple</label>
         <div class="relative">
           <input type="text" id="f_sector" placeholder="TODOS LOS SECTORES..." readonly onclick="abrirModalSector()"
-            class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold uppercase focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer pr-8">
+            class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold uppercase focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer pr-8 truncate">
           <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute right-2.5 top-2 pointer-events-none"></i>
         </div>
       </div>
 
-      <!-- FILTRO MANZANA (MZ) - COINCIDENCIA EXACTA -->
+      <!-- FILTRO MANZANA (MZ) - COINCIDENCIA EXACTA Y MÚLTIPLE SEPARADA POR COMAS -->
       <div>
-        <label for="f_mz" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Manzana (Mz) [Exacta]</label>
-        <input type="text" id="f_mz" placeholder="Ej: 5" oninput="aplicarFiltros()"
+        <label for="f_mz" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Manzana (Mz) [Separar por comas]</label>
+        <input type="text" id="f_mz" placeholder="Ej: 5, 12, A" oninput="aplicarFiltros()"
           class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none">
       </div>
 
@@ -205,40 +217,40 @@
             class="w-full px-2 py-1 border border-slate-300 rounded text-xs outline-none bg-white">
         </div>
 
-        <!-- BADGE DINÁMICO DE EDAD -->
         <div id="badgeEdadEquivalente" class="hidden mt-1.5 p-1.5 bg-blue-600 text-white text-[10px] rounded font-bold text-center flex items-center justify-center gap-1 shadow-sm">
           <i data-lucide="user-check" class="w-3 h-3"></i>
           <span id="textoEdadEquivalente">Rango: -</span>
         </div>
       </div>
 
-      <!-- PANEL DE ESTADÍSTICAS POR GRUPO ETARIO -->
+      <!-- PANEL DE ESTADÍSTICAS INTERACTIVO POR GRUPO ETARIO -->
       <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
         <h3 class="text-xs font-bold text-slate-800 uppercase border-b pb-1 flex items-center justify-between">
           <span>Estadística Demográfica</span>
           <span id="stat_total" class="text-blue-700 font-extrabold text-[11px]">0 pers.</span>
         </h3>
+        <p class="text-[10px] text-slate-500 font-medium">Haz clic en un grupo para ubicarlo en el mapa:</p>
         <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-          <div class="bg-emerald-50 border border-emerald-200 p-1.5 rounded flex justify-between items-center">
-            <span class="text-emerald-800 font-medium">Niños (&lt;12)</span>
-            <span id="stat_ninos" class="font-bold text-emerald-900">0</span>
-          </div>
-          <div class="bg-teal-50 border border-teal-200 p-1.5 rounded flex justify-between items-center">
-            <span class="text-teal-800 font-medium">Adolesc. (12-17)</span>
-            <span id="stat_adolescentes" class="font-bold text-teal-900">0</span>
-          </div>
-          <div class="bg-blue-50 border border-blue-200 p-1.5 rounded flex justify-between items-center">
-            <span class="text-blue-800 font-medium">Jóvenes (18-29)</span>
-            <span id="stat_jovenes" class="font-bold text-blue-900">0</span>
-          </div>
-          <div class="bg-indigo-50 border border-indigo-200 p-1.5 rounded flex justify-between items-center">
-            <span class="text-indigo-800 font-medium">Adultos (30-59)</span>
-            <span id="stat_adultos" class="font-bold text-indigo-900">0</span>
-          </div>
-          <div class="bg-purple-50 border border-purple-200 p-1.5 rounded flex justify-between items-center col-span-2">
-            <span class="text-purple-800 font-medium">Ancianos (60+)</span>
-            <span id="stat_ancianos" class="font-bold text-purple-900">0</span>
-          </div>
+          <button id="btn_etario_ninos" onclick="toggleFiltroEtario('ninos')" class="bg-emerald-50 border border-emerald-300 p-1.5 rounded flex justify-between items-center hover:bg-emerald-100 transition text-left cursor-pointer">
+            <span class="text-emerald-800 font-bold">Niños (&lt;12)</span>
+            <span id="stat_ninos" class="font-extrabold text-emerald-900">0</span>
+          </button>
+          <button id="btn_etario_adolescentes" onclick="toggleFiltroEtario('adolescentes')" class="bg-teal-50 border border-teal-300 p-1.5 rounded flex justify-between items-center hover:bg-teal-100 transition text-left cursor-pointer">
+            <span class="text-teal-800 font-bold">Adolesc. (12-17)</span>
+            <span id="stat_adolescentes" class="font-extrabold text-teal-900">0</span>
+          </button>
+          <button id="btn_etario_jovenes" onclick="toggleFiltroEtario('jovenes')" class="bg-blue-50 border border-blue-300 p-1.5 rounded flex justify-between items-center hover:bg-blue-100 transition text-left cursor-pointer">
+            <span class="text-blue-800 font-bold">Jóvenes (18-29)</span>
+            <span id="stat_jovenes" class="font-extrabold text-blue-900">0</span>
+          </button>
+          <button id="btn_etario_adultos" onclick="toggleFiltroEtario('adultos')" class="bg-indigo-50 border border-indigo-300 p-1.5 rounded flex justify-between items-center hover:bg-indigo-100 transition text-left cursor-pointer">
+            <span class="text-indigo-800 font-bold">Adultos (30-59)</span>
+            <span id="stat_adultos" class="font-extrabold text-indigo-900">0</span>
+          </button>
+          <button id="btn_etario_ancianos" onclick="toggleFiltroEtario('ancianos')" class="bg-purple-50 border border-purple-300 p-1.5 rounded flex justify-between items-center hover:bg-purple-100 transition text-left cursor-pointer col-span-2">
+            <span class="text-purple-800 font-bold">Ancianos (60+)</span>
+            <span id="stat_ancianos" class="font-extrabold text-purple-900">0</span>
+          </button>
         </div>
       </div>
 
@@ -250,31 +262,37 @@
     </main>
   </div>
 
-  <!-- MODAL DE SELECCIÓN DE SECTOR -->
+  <!-- MODAL DE SELECCIÓN DE SECTORES MÚLTIPLES -->
   <div id="modalSector" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
       <div class="bg-blue-700 text-white p-3.5 flex justify-between items-center">
         <div class="flex items-center gap-2">
           <i data-lucide="map-pin" class="w-5 h-5"></i>
-          <h3 class="font-bold text-sm">Seleccionar Sector Registrado</h3>
+          <h3 class="font-bold text-sm">Seleccionar Sectores Registrados</h3>
         </div>
         <button onclick="cerrarModalSector()" class="hover:bg-blue-800 p-1 rounded transition">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-      <div class="p-3 border-b bg-slate-50">
+      <div class="p-3 border-b bg-slate-50 flex gap-2">
         <input type="text" id="searchSectorInput" placeholder="ESCRIBA PARA BUSCAR SECTOR..." oninput="filtrarListaSectores()"
-          class="w-full px-3 py-2 border border-blue-400 rounded-lg text-xs uppercase font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+          class="flex-1 px-3 py-2 border border-blue-400 rounded-lg text-xs uppercase font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+        <button onclick="marcarTodosSectores(true)" class="px-2.5 py-1.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded hover:bg-blue-200">
+          MARCAR
+        </button>
+        <button onclick="marcarTodosSectores(false)" class="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded hover:bg-slate-300">
+          DESMARCAR
+        </button>
       </div>
-      <div id="contenedorListaSectores" class="p-2 overflow-y-auto flex-1 divide-y divide-slate-100">
-        <!-- Opciones generadas por JS -->
+      <div id="contenedorListaSectores" class="p-2 overflow-y-auto flex-1 divide-y divide-slate-100 space-y-1">
+        <!-- Checkboxes generados por JS -->
       </div>
       <div class="p-3 bg-slate-100 border-t flex justify-end gap-2">
-        <button onclick="seleccionarSector('')" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300">
+        <button onclick="seleccionarSectorTodos()" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300">
           TODOS
         </button>
-        <button onclick="cerrarModalSector()" class="px-4 py-1.5 bg-slate-300 text-slate-800 text-xs font-bold rounded-lg hover:bg-slate-400">
-          CANCELAR
+        <button onclick="confirmarSectoresSeleccionados()" class="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow">
+          ACEPTAR
         </button>
       </div>
     </div>
@@ -288,8 +306,28 @@
     let map = null;
     let markersLayer = L.layerGroup();
     let drawnItems = new L.FeatureGroup();
+    let sectoresSeleccionados = new Set();
+    let filtroEtarioActivo = null; // 'ninos', 'adolescentes', 'jovenes', 'adultos', 'ancianos'
 
-    // Cargar opciones de Sectores del Datalist al Modal
+    function togglePanelFiltros() {
+      const panel = document.getElementById('panelFiltros');
+      const btnFlotante = document.getElementById('btnAbrirPanelFlotante');
+      const iconToggle = document.getElementById('iconTogglePanel');
+
+      if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        btnFlotante.classList.add('hidden');
+        if (iconToggle) iconToggle.setAttribute('data-lucide', 'panel-left-close');
+      } else {
+        panel.classList.add('hidden');
+        btnFlotante.classList.remove('hidden');
+        if (iconToggle) iconToggle.setAttribute('data-lucide', 'panel-left');
+      }
+      lucide.createIcons();
+      setTimeout(() => { if (map) map.invalidateSize(); }, 300);
+    }
+
+    // Inicializar Modal de Sectores con Checkboxes
     function initModalSectores() {
       const datalist = document.getElementById('listaSectores');
       const opciones = Array.from(datalist.options).map(opt => opt.value);
@@ -304,13 +342,34 @@
         return;
       }
       lista.forEach(sec => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-2.5 hover:bg-blue-50 cursor-pointer rounded transition text-xs font-bold text-slate-700 uppercase";
-        div.innerHTML = `<span>${sec}</span><i data-lucide="chevron-right" class="w-4 h-4 text-blue-600"></i>`;
-        div.onclick = () => seleccionarSector(sec);
-        cont.appendChild(div);
+        const isChecked = sectoresSeleccionados.has(sec);
+        const label = document.createElement('label');
+        label.className = "flex items-center gap-3 p-2 hover:bg-blue-50 cursor-pointer rounded transition text-xs font-bold text-slate-700 uppercase";
+        label.innerHTML = `
+          <input type="checkbox" value="${sec}" ${isChecked ? 'checked' : ''} onchange="toggleSectorCheckbox('${sec}', this.checked)" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+          <span class="flex-1">${sec}</span>
+        `;
+        cont.appendChild(label);
       });
-      lucide.createIcons();
+    }
+
+    function toggleSectorCheckbox(sec, checked) {
+      if (checked) {
+        sectoresSeleccionados.add(sec);
+      } else {
+        sectoresSeleccionados.delete(sec);
+      }
+    }
+
+    function marcarTodosSectores(estado) {
+      const datalist = document.getElementById('listaSectores');
+      const opciones = Array.from(datalist.options).map(opt => opt.value);
+      if (estado) {
+        opciones.forEach(sec => sectoresSeleccionados.add(sec));
+      } else {
+        sectoresSeleccionados.clear();
+      }
+      filtrarListaSectores();
     }
 
     function filtrarListaSectores() {
@@ -332,24 +391,56 @@
       document.getElementById('modalSector').classList.add('hidden');
     }
 
-    function seleccionarSector(valor) {
-      document.getElementById('f_sector').value = valor;
+    function seleccionarSectorTodos() {
+      sectoresSeleccionados.clear();
+      document.getElementById('f_sector').value = "";
       cerrarModalSector();
       aplicarFiltros();
     }
 
-    // Inicializar Mapa y capas satelitales
+    function confirmarSectoresSeleccionados() {
+      const arraySectores = Array.from(sectoresSeleccionados);
+      if (arraySectores.length === 0) {
+        document.getElementById('f_sector').value = "";
+      } else {
+        document.getElementById('f_sector').value = arraySectores.join(', ');
+      }
+      cerrarModalSector();
+      aplicarFiltros();
+    }
+
+    // Filtro por Grupo Etario al presionar tarjetas de estadística
+    function toggleFiltroEtario(grupo) {
+      const botones = ['ninos', 'adolescentes', 'jovenes', 'adultos', 'ancianos'];
+      
+      if (filtroEtarioActivo === grupo) {
+        filtroEtarioActivo = null;
+      } else {
+        filtroEtarioActivo = grupo;
+      }
+
+      botones.forEach(b => {
+        const btn = document.getElementById(`btn_etario_${b}`);
+        if (b === filtroEtarioActivo) {
+          btn.classList.add('ring-2', 'ring-blue-600', 'shadow-md', 'scale-[1.02]');
+        } else {
+          btn.classList.remove('ring-2', 'ring-blue-600', 'shadow-md', 'scale-[1.02]');
+        }
+      });
+
+      aplicarFiltros();
+    }
+
+    // Inicializar Mapa
     function initMap() {
       map = L.map('map').setView([-9.288639, -76.008830], 14);
 
-      // Capa Google Hybrid (Vista HD estilo Google Earth)
       const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
         maxZoom: 20,
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
         attribution: '&copy; Google Maps'
       });
 
-      // Capa Callejera OpenStreetMap
       const callejero = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
       });
@@ -365,7 +456,6 @@
       markersLayer.addTo(map);
       map.addLayer(drawnItems);
 
-      // Habilitar dibujo de zonas / polígonos
       const drawControl = new L.Control.Draw({
         draw: {
           polygon: true,
@@ -382,7 +472,6 @@
       });
       map.addControl(drawControl);
 
-      // Eventos al crear o editar figuras dibujadas
       map.on(L.Draw.Event.CREATED, function (e) {
         drawnItems.clearLayers();
         drawnItems.addLayer(e.layer);
@@ -401,7 +490,6 @@
       cargarBaseDatos();
     }
 
-    // Cargar base de datos
     async function cargarBaseDatos() {
       document.getElementById('badgeConteo').textContent = "Cargando...";
       try {
@@ -445,7 +533,25 @@
       return edad;
     }
 
-    // Muestra qué edades se están filtrando dinámicamente según el rango de fecha seleccionado
+    // Calcula edad detallada para mostrar meses cuando edad = 0 años
+    function obtenerTextoEdadDetallada(strFecha) {
+      const edad = calcularEdad(strFecha);
+      if (edad === null) return 'S/I';
+      
+      if (edad === 0) {
+        const fn = parseFechaPeruana(strFecha);
+        const hoy = new Date();
+        let meses = (hoy.getFullYear() - fn.getFullYear()) * 12 + (hoy.getMonth() - fn.getMonth());
+        if (hoy.getDate() < fn.getDate()) {
+          meses--;
+        }
+        if (meses < 0) meses = 0;
+        return `0 años ( ${meses} meses )`;
+      }
+      
+      return `${edad} años`;
+    }
+
     function actualizarInfoEdad() {
       const fnDesdeStr = document.getElementById('f_fn_desde').value;
       const fnHastaStr = document.getElementById('f_fn_hasta').value;
@@ -460,12 +566,8 @@
       let edadMin = null;
       let edadMax = null;
 
-      if (fnHastaStr) {
-        edadMin = calcularEdad(fnHastaStr);
-      }
-      if (fnDesdeStr) {
-        edadMax = calcularEdad(fnDesdeStr);
-      }
+      if (fnHastaStr) edadMin = calcularEdad(fnHastaStr);
+      if (fnDesdeStr) edadMax = calcularEdad(fnDesdeStr);
 
       badge.classList.remove('hidden');
 
@@ -482,7 +584,6 @@
       lucide.createIcons();
     }
 
-    // Normaliza Mz para búsquedas exactas (Ej: "5" coincide con "5", "05" o "MZ 5")
     function normalizarMz(mzStr) {
       if (!mzStr) return "";
       return mzStr.toString().toLowerCase().replace(/mz|\.|\s/g, '').trim();
@@ -491,9 +592,14 @@
     // Filtrar y Renderizar los marcadores
     function aplicarFiltros() {
       const ffamiliar = document.getElementById('f_ffamiliar').value.trim().toLowerCase();
-      const sector = document.getElementById('f_sector').value.trim().toLowerCase();
-      const mzInput = document.getElementById('f_mz').value.trim().toLowerCase();
-      const mzNormalizada = normalizarMz(mzInput);
+      
+      // Filtro Múltiple de Sectores
+      const arraySectoresInput = Array.from(sectoresSeleccionados).map(s => s.toLowerCase());
+
+      // Filtro Múltiple de Manzanas separadas por comas (,)
+      const mzInputRaw = document.getElementById('f_mz').value.trim();
+      const arrayMzInput = mzInputRaw ? mzInputRaw.split(',').map(m => normalizarMz(m)).filter(m => m !== "") : [];
+
       const dni = document.getElementById('f_dni').value.trim().toLowerCase();
       const nombre = document.getElementById('f_nombre').value.trim().toLowerCase();
 
@@ -507,12 +613,20 @@
 
       const filtrados = baseDatos.filter(item => {
         if (ffamiliar && (!item.ffamiliar || !item.ffamiliar.toString().toLowerCase().includes(ffamiliar))) return false;
-        if (sector && (!item.sector || !item.sector.toString().toLowerCase().includes(sector))) return false;
         
-        // Coincidencia exacta de manzana (Mz)
-        if (mzInput) {
+        // Comprobar si coincide con alguno de los sectores seleccionados
+        if (arraySectoresInput.length > 0) {
+          if (!item.sector) return false;
+          const itemSector = item.sector.toString().toLowerCase();
+          const coincideSector = arraySectoresInput.some(sec => itemSector.includes(sec));
+          if (!coincideSector) return false;
+        }
+
+        // Comprobar si coincide con alguna de las Manzanas separadas por comas
+        if (arrayMzInput.length > 0) {
           const itemMz = normalizarMz(item.mz);
-          if (itemMz !== mzNormalizada) return false;
+          const coincideMz = arrayMzInput.some(m => itemMz === m);
+          if (!coincideMz) return false;
         }
 
         if (dni && (!item.dni || !item.dni.toString().toLowerCase().includes(dni))) return false;
@@ -525,10 +639,20 @@
           if (dateHasta && fnFecha > dateHasta) return false;
         }
 
+        // Filtro interactivo por Grupo Etario
+        if (filtroEtarioActivo) {
+          const edad = calcularEdad(item.fn);
+          if (edad === null) return false;
+          if (filtroEtarioActivo === 'ninos' && edad >= 12) return false;
+          if (filtroEtarioActivo === 'adolescentes' && (edad < 12 || edad > 17)) return false;
+          if (filtroEtarioActivo === 'jovenes' && (edad < 18 || edad > 29)) return false;
+          if (filtroEtarioActivo === 'adultos' && (edad < 30 || edad > 59)) return false;
+          if (filtroEtarioActivo === 'ancianos' && edad < 60) return false;
+        }
+
         return true;
       });
 
-      // Recalcular estadísticas globales
       actualizarEstadisticas(filtrados);
 
       // Agrupar integrantes por Coordenadas
@@ -557,7 +681,6 @@
       let totalPuntosEnFigura = 0;
 
       Object.values(gruposCoordenadas).forEach(grupo => {
-        // Filtrar si existe polígono/dibujo activo
         if (drawnItems.getLayers().length > 0) {
           let dentro = false;
           const pt = L.latLng(grupo.lat, grupo.lng);
@@ -575,7 +698,6 @@
         totalPersonasEnFigura += grupo.integrantes.length;
         bounds.push([grupo.lat, grupo.lng]);
 
-        // Estadísticas internas del marcador
         let countNinos = 0, countAdolescentes = 0, countJovenes = 0, countAdultos = 0, countAncianos = 0;
 
         grupo.integrantes.forEach(ing => {
@@ -616,8 +738,7 @@
         `;
 
         grupo.integrantes.forEach(ing => {
-          const edad = calcularEdad(ing.fn);
-          const edadTxt = edad !== null ? `${edad} años` : 'S/I';
+          const edadTxt = obtenerTextoEdadDetallada(ing.fn);
           const tel = ing.telefono ? ing.telefono.toString().trim() : '';
 
           popupContent += `
@@ -650,7 +771,6 @@
         markersLayer.addLayer(marker);
       });
 
-      // Actualizar información dentro de las figuras dibujadas (Radio / Conteo de personas)
       if (drawnItems.getLayers().length > 0) {
         drawnItems.eachLayer(layer => {
           let labelText = "";
@@ -705,12 +825,17 @@
     function limpiarFiltros() {
       document.getElementById('f_ffamiliar').value = "";
       document.getElementById('f_sector').value = "";
+      sectoresSeleccionados.clear();
       document.getElementById('f_mz').value = "";
       document.getElementById('f_dni').value = "";
       document.getElementById('f_nombre').value = "";
       document.getElementById('f_fn_desde').value = "";
       document.getElementById('f_fn_hasta').value = "";
       document.getElementById('badgeEdadEquivalente').classList.add('hidden');
+      filtroEtarioActivo = null;
+      ['ninos', 'adolescentes', 'jovenes', 'adultos', 'ancianos'].forEach(b => {
+        document.getElementById(`btn_etario_${b}`).classList.remove('ring-2', 'ring-blue-600', 'shadow-md', 'scale-[1.02]');
+      });
       drawnItems.clearLayers();
       aplicarFiltros();
     }
