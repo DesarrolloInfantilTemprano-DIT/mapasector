@@ -52,6 +52,14 @@
     .draw-tooltip::before {
       border-top-color: rgba(15, 23, 42, 0.9);
     }
+    @keyframes pulseGps {
+      0% { transform: scale(0.8); opacity: 0.9; }
+      50% { transform: scale(1.4); opacity: 0.2; }
+      100% { transform: scale(0.8); opacity: 0.9; }
+    }
+    .gps-pulse-ring {
+      animation: pulseGps 1.5s infinite ease-in-out;
+    }
   </style>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800 h-screen overflow-hidden flex flex-col">
@@ -187,7 +195,7 @@
         <div>
           <label for="f_tipo_monitoreo" class="block text-[10px] font-bold text-amber-800 uppercase mb-0.5">Tipo de Consulta:</label>
           <select id="f_tipo_monitoreo" onchange="cambiarTipoMonitoreo()" class="w-full px-2 py-1.5 border border-amber-300 rounded text-xs font-bold text-slate-700 bg-white outline-none focus:ring-2 focus:ring-amber-500">
-            <option value="">-- Sin Monitoreo Activo --</option>
+            <option value="">-- Todos los Registros (Vista Global) --</option>
             <option value="InaCRED">Inasistente CRED (InaCRED)</option>
             <option value="InaAnemia">Inasistente Anemia (InaAnemia)</option>
             <option value="InaVAC">Vacunas Pendientes (InaVAC)</option>
@@ -319,8 +327,8 @@
       <div id="map"></div>
 
       <!-- BOTÓN FLOTANTE MI UBICACIÓN ACTUAL -->
-      <button onclick="obtenerUbicacionGPS(true)" title="Mi Ubicación Actual" class="absolute bottom-6 right-4 z-20 bg-white hover:bg-slate-100 text-slate-800 p-2.5 rounded-full shadow-2xl border border-slate-300 transition flex items-center justify-center">
-        <i data-lucide="crosshair" class="w-6 h-6 text-blue-600"></i>
+      <button onclick="centrarEnUbicacionGPS(true)" title="Centrar en Mi Ubicación GPS" class="absolute bottom-6 right-4 z-20 bg-white hover:bg-slate-100 text-slate-800 p-2.5 rounded-full shadow-2xl border border-slate-300 transition flex items-center justify-center">
+        <i data-lucide="crosshair" class="w-6 h-6 text-red-600"></i>
       </button>
     </main>
   </div>
@@ -374,6 +382,7 @@
     let markersLayer = L.layerGroup();
     let drawnItems = new L.FeatureGroup();
     let userGpsMarker = null;
+    let userCurrentCoords = null;
     let sectoresSeleccionados = new Set();
     let filtroEtarioActivo = null;
 
@@ -412,23 +421,23 @@
       });
     }
 
-    // ICONO CRUZ PARA UBICACIÓN GPS
+    // ICONO CRUZ EN TIEMPO REAL PARA GPS ROJO PULSANTE CON ALTA VISIBILIDAD
     function crearIconoCruzGPS() {
       const svg = `
-        <div style="position:relative; width:30px; height:30px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:26px; height:26px; border-radius:50%; background:rgba(37,99,235,0.25); animation:pulse 1.8s infinite;"></div>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
-            <circle cx="12" cy="12" r="9" fill="#ffffff" fill-opacity="0.8"/>
-            <line x1="12" y1="3" x2="12" y2="21"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
+        <div style="position:relative; width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
+          <div class="gps-pulse-ring" style="position:absolute; width:32px; height:32px; border-radius:50%; background:rgba(239, 68, 68, 0.45);"></div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" width="32" height="32">
+            <circle cx="12" cy="12" r="9" fill="#ffffff" fill-opacity="0.95"/>
+            <line x1="12" y1="2" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
           </svg>
         </div>
       `;
       return L.divIcon({
         html: svg,
         className: "",
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
       });
     }
 
@@ -558,6 +567,40 @@
       }
     }
 
+    // CARGA INICIAL COMPLETA DE TODAS LAS HOJAS DE MONITOREO
+    async function cargarMonitoreoInicialCompleto() {
+      const pestañasMonitoreo = ["Gestante", "AnemiaInfantil", "InaCRED", "InaAnemia", "InaVAC", "HTA", "DM", "PAT"];
+      
+      for (const hoja of pestañasMonitoreo) {
+        const localMon = localStorage.getItem(`SIGIS_MON_${hoja}`);
+        if (localMon) {
+          baseMonitoreo[hoja] = JSON.parse(localMon);
+        }
+      }
+
+      aplicarFiltros();
+
+      for (const hoja of pestañasMonitoreo) {
+        try {
+          const response = await fetch(`${URL_MONITOREO}?action=obtenerMonitoreo&hoja=${encodeURIComponent(hoja)}`);
+          const result = await response.json();
+          if (result && result.status === "ok") {
+            baseMonitoreo[hoja] = {};
+            (result.data || []).forEach(row => {
+              const dniStr = row.dni ? row.dni.toString().trim() : "";
+              if (dniStr) {
+                baseMonitoreo[hoja][dniStr] = { valB: row.valB || "", valC: row.valC || "" };
+              }
+            });
+            try { localStorage.setItem(`SIGIS_MON_${hoja}`, JSON.stringify(baseMonitoreo[hoja])); } catch(e){}
+          }
+        } catch(e) {
+          console.log(`Carga diferida ${hoja}:`, e);
+        }
+      }
+      aplicarFiltros();
+    }
+
     async function cargarMonitoreoHoja(hojaNombre) {
       if (baseMonitoreo[hojaNombre]) {
         aplicarFiltros();
@@ -676,7 +719,8 @@
 
       initModalSectores();
       cargarBaseDatos();
-      obtenerUbicacionGPS(false); // Pedir ubicación al iniciar
+      iniciarSeguimientoGPSContinuo();
+      cargarMonitoreoInicialCompleto();
     }
 
     async function cargarBaseDatos() {
@@ -771,28 +815,75 @@
       return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
     }
 
-    // OBTENER UBICACIÓN GPS CON ICONO DE CRUZ
-    function obtenerUbicacionGPS(centrarMap = true) {
-      if (!navigator.geolocation) return;
+    // SEGUIMIENTO GPS EN TIEMPO REAL CONTINUO CON Detección directa
+    function iniciarSeguimientoGPSContinuo() {
+      if (!navigator.geolocation) {
+        alert("Geolocalización no soportada por el navegador.");
+        return;
+      }
 
-      navigator.geolocation.getCurrentPosition(position => {
+      // Consulta rápida inicial
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        userCurrentCoords = [lat, lng];
+
+        if (!userGpsMarker) {
+          userGpsMarker = L.marker([lat, lng], {
+            icon: crearIconoCruzGPS(),
+            zIndexOffset: 3000
+          }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
+        } else {
+          userGpsMarker.setLatLng([lat, lng]);
+        }
+      }, err => console.log("GPS inicial:", err.message), { enableHighAccuracy: true });
+
+      // Monitoreo continuo
+      navigator.geolocation.watchPosition(position => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
+        userCurrentCoords = [lat, lng];
 
-        if (userGpsMarker) map.removeLayer(userGpsMarker);
-
-        userGpsMarker = L.marker([lat, lng], {
-          icon: crearIconoCruzGPS(),
-          zIndexOffset: 1000
-        }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
-
-        if (centrarMap) {
-          map.setView([lat, lng], 16);
-          userGpsMarker.openPopup();
+        if (userGpsMarker) {
+          userGpsMarker.setLatLng([lat, lng]);
+        } else {
+          userGpsMarker = L.marker([lat, lng], {
+            icon: crearIconoCruzGPS(),
+            zIndexOffset: 3000
+          }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
         }
       }, err => {
-        if (centrarMap) alert("Por favor activa la ubicación GPS en tu dispositivo.");
-      }, { enableHighAccuracy: true });
+        console.log("GPS Watch:", err.message);
+      }, {
+        enableHighAccuracy: true,
+        maximumAge: 3000,
+        timeout: 10000
+      });
+    }
+
+    function centrarEnUbicacionGPS(mostrarMensaje = false) {
+      if (userCurrentCoords) {
+        map.setView(userCurrentCoords, 17);
+        if (userGpsMarker) userGpsMarker.openPopup();
+      } else {
+        navigator.geolocation.getCurrentPosition(pos => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          userCurrentCoords = [lat, lng];
+          map.setView([lat, lng], 17);
+          if (userGpsMarker) {
+            userGpsMarker.setLatLng([lat, lng]);
+          } else {
+            userGpsMarker = L.marker([lat, lng], {
+              icon: crearIconoCruzGPS(),
+              zIndexOffset: 3000
+            }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
+          }
+          userGpsMarker.openPopup();
+        }, err => {
+          alert("Asegúrate de permitir el acceso a la ubicación GPS en la barra del navegador.");
+        }, { enableHighAccuracy: true });
+      }
     }
 
     function actualizarInfoEdad() {
@@ -832,7 +923,6 @@
       return mzStr.toString().toLowerCase().replace(/mz|\.|\s/g, '').trim();
     }
 
-    // OBTENER RESUMEN COMPLETO DE MONITOREO DE UNA PERSONA (PARA EXPORTAR Y MOSTRAR EN POPUP)
     function obtenerResumenMonitoreoPersona(dniStr) {
       if (!dniStr) return "";
       let hallazgos = [];
@@ -853,7 +943,6 @@
       return hallazgos.join(" | ");
     }
 
-    // EXPORTAR A EXCEL DIRECTO (.XLSX) USANDO SHEETJS
     function exportarExcelDirecto() {
       if (!ultimosFiltradosGlobal || ultimosFiltradosGlobal.length === 0) {
         alert("No hay registros filtrados para exportar.");
@@ -885,7 +974,6 @@
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Monitoreo_SIGIS_FED");
 
-      // Auto-Ajustar anchos de columnas
       const maxAnchos = [
         { wch: 6 }, { wch: 15 }, { wch: 35 }, { wch: 12 },
         { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 15 },
@@ -896,7 +984,6 @@
       XLSX.writeFile(workbook, `SIGIS_FED_Monitoreo_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // Filtrar y Renderizar los marcadores
     function aplicarFiltros() {
       const ffamiliar = document.getElementById('f_ffamiliar').value.trim().toLowerCase();
       
@@ -914,7 +1001,6 @@
       const dateDesde = fnDesdeStr ? new Date(fnDesdeStr) : null;
       const dateHasta = fnHastaStr ? new Date(fnHastaStr) : null;
 
-      // Filtros de Monitoreo
       const tipoMon = document.getElementById('f_tipo_monitoreo').value;
       const nombreVacuna = document.getElementById('f_nombre_vacuna').value.trim().toLowerCase();
       const monDesdeStr = document.getElementById('f_mon_desde').value;
@@ -1048,7 +1134,6 @@
 
           const ingDni = ing.dni ? ing.dni.toString().trim() : '';
 
-          // Evaluar si alguna persona de la casa está en gestante o monitoreo
           if (baseMonitoreo["Gestante"] && baseMonitoreo["Gestante"][ingDni]) grupoTieneGestante = true;
           if (baseMonitoreo["AnemiaInfantil"] && baseMonitoreo["AnemiaInfantil"][ingDni]) grupoTieneRiesgoAlto = true;
           if (baseMonitoreo["InaCRED"] && baseMonitoreo["InaCRED"][ingDni]) grupoTieneRiesgoAlto = true;
@@ -1059,9 +1144,8 @@
           if (baseMonitoreo["PAT"] && baseMonitoreo["PAT"][ingDni]) grupoTieneCronico = true;
         });
 
-        // Determinar icono
         let iconoAUsar = iconosRiesgo.azul;
-        if (grupoTieneGestante) iconoAUsar = iconosRiesgo.guinda; // Color Guinda exclusivo Gestante
+        if (grupoTieneGestante) iconoAUsar = iconosRiesgo.guinda;
         else if (grupoTieneRiesgoAlto) iconoAUsar = iconosRiesgo.rojo;
         else if (grupoTieneCronico) iconoAUsar = iconosRiesgo.amarillo;
 
@@ -1103,26 +1187,28 @@
           const tel = ing.telefono ? ing.telefono.toString().trim() : '';
           const ingDni = ing.dni ? ing.dni.toString().trim() : '';
 
-          // Obtenemos todos los problemas/pendientes de monitoreo de esta persona
           const resumenMon = obtenerResumenMonitoreoPersona(ingDni);
           let htmlMonitoreoInfo = "";
           let htmlAlertaUrgente = "";
 
           if (resumenMon) {
-            // Verificar alertas urgentes
             if (resumenMon.includes("Gestante FPP")) {
               const regM = baseMonitoreo["Gestante"][ingDni];
-              const diasFPP = diasHastaFecha(regM.valB);
-              if (diasFPP !== null && diasFPP <= 30 && diasFPP >= 0) {
-                htmlAlertaUrgente = `<p class="text-[10px] bg-purple-600 text-white font-extrabold p-1 rounded shadow animate-pulse">🤰 ALERTA: PARTO PRÓXIMO (${diasFPP} días)</p>`;
+              if (regM) {
+                const diasFPP = diasHastaFecha(regM.valB);
+                if (diasFPP !== null && diasFPP <= 30 && diasFPP >= 0) {
+                  htmlAlertaUrgente = `<p class="text-[10px] bg-purple-600 text-white font-extrabold p-1 rounded shadow animate-pulse">🤰 ALERTA: PARTO PRÓXIMO (${diasFPP} días)</p>`;
+                }
               }
             }
             if (resumenMon.includes("Niño Anémico")) {
               const regM = baseMonitoreo["AnemiaInfantil"][ingDni];
-              const fechaAlta = sumarMesesAFecha(regM.valB, 7);
-              const diasFaltantes = diasHastaFecha(fechaAlta);
-              if (diasFaltantes !== null && diasFaltantes <= 30 && diasFaltantes >= 0) {
-                htmlAlertaUrgente = `<p class="text-[10px] bg-red-600 text-white font-extrabold p-1 rounded shadow animate-pulse">⚡ ALERTA: Alta Próxima (${diasFaltantes} días)</p>`;
+              if (regM) {
+                const fechaAlta = sumarMesesAFecha(regM.valB, 7);
+                const diasFaltantes = diasHastaFecha(fechaAlta);
+                if (diasFaltantes !== null && diasFaltantes <= 30 && diasFaltantes >= 0) {
+                  htmlAlertaUrgente = `<p class="text-[10px] bg-red-600 text-white font-extrabold p-1 rounded shadow animate-pulse">⚡ ALERTA: Alta Próxima (${diasFaltantes} días)</p>`;
+                }
               }
             }
 
