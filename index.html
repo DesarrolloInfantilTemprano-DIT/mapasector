@@ -185,11 +185,14 @@
         </button>
       </div>
 
-      <!-- MÓDULO DE MONITOREO ESPECIAL -->
+      <!-- MÓDULO DE MONITOREO ESPECIAL CON ESTADÍSTICA INTEGRADA -->
       <div class="bg-amber-50/80 p-3 rounded-lg border border-amber-200 space-y-2">
-        <div class="flex items-center gap-1.5 text-amber-900 font-bold text-xs uppercase border-b border-amber-200 pb-1">
-          <i data-lucide="activity" class="w-4 h-4 text-amber-600"></i>
-          <span>Módulo de Monitoreo</span>
+        <div class="flex items-center justify-between gap-1.5 text-amber-900 font-bold text-xs uppercase border-b border-amber-200 pb-1">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="activity" class="w-4 h-4 text-amber-600"></i>
+            <span>Módulo de Monitoreo</span>
+          </div>
+          <span id="labelConteoMonitoreo" class="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded-full font-bold"></span>
         </div>
         
         <div>
@@ -380,11 +383,25 @@
     let ultimosFiltradosGlobal = [];
     let map = null;
     let markersLayer = L.layerGroup();
+    let linesLayer = L.layerGroup(); // Capa exclusiva para trazado de líneas de pacientes
     let drawnItems = new L.FeatureGroup();
     let userGpsMarker = null;
     let userCurrentCoords = null;
     let sectoresSeleccionados = new Set();
     let filtroEtarioActivo = null;
+
+    // Nombres base de opciones de monitoreo para actualización dinámica
+    const NOMBRES_MONITOREO_BASE = {
+      "": "-- Todos los Registros (Vista Global) --",
+      "InaCRED": "Inasistente CRED (InaCRED)",
+      "InaAnemia": "Inasistente Anemia (InaAnemia)",
+      "InaVAC": "Vacunas Pendientes (InaVAC)",
+      "Gestante": "Gestantes (FPP)",
+      "AnemiaInfantil": "Niños Anémicos (+7 meses Alta)",
+      "PAT": "Pacientes TBC (PAT)",
+      "HTA": "Hipertensos (HTA)",
+      "DM": "Diabéticos (DM)"
+    };
 
     // ICONOS COLOREADOS SEGÚN RIESGO (Pin SVGs)
     function crearIconoColor(colorHex) {
@@ -679,6 +696,7 @@
       };
 
       L.control.layers(baseMaps).addTo(map);
+      linesLayer.addTo(map);
       markersLayer.addTo(map);
       map.addLayer(drawnItems);
 
@@ -815,15 +833,14 @@
       return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
     }
 
-    // SEGUIMIENTO GPS EN TIEMPO REAL CONTINUO CON Detección directa
+    // SEGUIMIENTO GPS OPTIMIZADO PARA MÓVILES (COMPATIBLE CON NAVEGADORES CELULARES)
     function iniciarSeguimientoGPSContinuo() {
       if (!navigator.geolocation) {
-        alert("Geolocalización no soportada por el navegador.");
+        console.log("Geolocalización no soportada.");
         return;
       }
 
-      // Consulta rápida inicial
-      navigator.geolocation.getCurrentPosition(pos => {
+      const manejarUbicacionExitosa = (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         userCurrentCoords = [lat, lng];
@@ -833,28 +850,31 @@
             icon: crearIconoCruzGPS(),
             zIndexOffset: 3000
           }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
+          
+          // Solo hacer primer enfoque suave si es la primera lectura
+          map.setView([lat, lng], 17);
         } else {
           userGpsMarker.setLatLng([lat, lng]);
         }
-      }, err => console.log("GPS inicial:", err.message), { enableHighAccuracy: true });
-
-      // Monitoreo continuo
-      navigator.geolocation.watchPosition(position => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        userCurrentCoords = [lat, lng];
-
-        if (userGpsMarker) {
-          userGpsMarker.setLatLng([lat, lng]);
-        } else {
-          userGpsMarker = L.marker([lat, lng], {
-            icon: crearIconoCruzGPS(),
-            zIndexOffset: 3000
-          }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
+        
+        // Redibujar líneas hacia pacientes si hay un monitoreo activo
+        const tipoMon = document.getElementById('f_tipo_monitoreo').value;
+        if (tipoMon) {
+          trazarLineasHaciaPacientes(tipoMon);
         }
-      }, err => {
-        console.log("GPS Watch:", err.message);
-      }, {
+      };
+
+      const manejarErrorGps = (err) => {
+        console.log("Error GPS:", err.message);
+        // Si falla por alta precisión en móviles, intentar modo estándar (celular)
+        navigator.geolocation.getCurrentPosition(manejarUbicacionExitosa, (e) => console.log("GPS Fallback:", e), { enableHighAccuracy: false, timeout: 15000 });
+      };
+
+      // Iniciar intento de lectura GPS
+      navigator.geolocation.getCurrentPosition(manejarUbicacionExitosa, manejarErrorGps, { enableHighAccuracy: true, timeout: 10000 });
+
+      // Rastreo continuo
+      navigator.geolocation.watchPosition(manejarUbicacionExitosa, manejarErrorGps, {
         enableHighAccuracy: true,
         maximumAge: 3000,
         timeout: 10000
@@ -881,8 +901,8 @@
           }
           userGpsMarker.openPopup();
         }, err => {
-          alert("Asegúrate de permitir el acceso a la ubicación GPS en la barra del navegador.");
-        }, { enableHighAccuracy: true });
+          alert("Asegúrate de permitir el acceso a la ubicación GPS en la barra del navegador de tu celular.");
+        }, { enableHighAccuracy: false, timeout: 10000 });
       }
     }
 
@@ -984,6 +1004,86 @@
       XLSX.writeFile(workbook, `SIGIS_FED_Monitoreo_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
+    // TRAZAR LÍNEAS DESDE LA CRUZ ROJA (GPS) HACIA CADA FAMILIA / PACIENTE FILTRADO
+    function trazarLineasHaciaPacientes(tipoMonitoreo) {
+      linesLayer.clearLayers();
+      if (!tipoMonitoreo || !userCurrentCoords || !ultimosFiltradosGlobal || ultimosFiltradosGlobal.length === 0) return;
+
+      const pAtendidos = new Set();
+
+      ultimosFiltradosGlobal.forEach(p => {
+        if (!p.georeferencia) return;
+        const strGeoref = p.georeferencia.toString().replace(/;/g, ',').replace(/\s+/g, '');
+        const coords = strGeoref.split(',');
+        if (coords.length >= 2) {
+          const lat = parseFloat(coords[0].replace(',', '.'));
+          const lng = parseFloat(coords[1].replace(',', '.'));
+          
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const coordKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+            if (!pAtendidos.has(coordKey)) {
+              pAtendidos.add(coordKey);
+
+              // Determinar color de línea según condición
+              let colorLinea = "#ef4444"; // Rojo por defecto
+              if (tipoMonitoreo === "Gestante") colorLinea = "#800020"; // Guinda
+              else if (tipoMonitoreo === "HTA" || tipoMonitoreo === "DM") colorLinea = "#f59e0b"; // Amarillo
+
+              const polyline = L.polyline([userCurrentCoords, [lat, lng]], {
+                color: colorLinea,
+                weight: 2.5,
+                opacity: 0.75,
+                dashArray: '6, 8'
+              });
+              linesLayer.addLayer(polyline);
+            }
+          }
+        }
+      });
+    }
+
+    // RECALCULAR Y MOSTRAR ESTADÍSTICA DENTRO DEL COMBO SELECT DEL MÓDULO MONITOREO
+    function actualizarEstadisticasSelectorMonitoreo(baseFiltradaActual) {
+      const selectMonitoreo = document.getElementById('f_tipo_monitoreo');
+      const labelConteo = document.getElementById('labelConteoMonitoreo');
+      const tipoSeleccionadoActual = selectMonitoreo.value;
+
+      const conteos = {
+        "InaCRED": 0, "InaAnemia": 0, "InaVAC": 0, "Gestante": 0,
+        "AnemiaInfantil": 0, "PAT": 0, "HTA": 0, "DM": 0
+      };
+
+      baseFiltradaActual.forEach(p => {
+        const dniStr = p.dni ? p.dni.toString().trim() : '';
+        if (!dniStr) return;
+
+        Object.keys(conteos).forEach(key => {
+          if (baseMonitoreo[key] && baseMonitoreo[key][dniStr]) {
+            conteos[key]++;
+          }
+        });
+      });
+
+      // Actualizar opciones del Select con cantidad entre paréntesis Ejm: Gestantes (FPP) (5)
+      Array.from(selectMonitoreo.options).forEach(opt => {
+        const key = opt.value;
+        const nombreBase = NOMBRES_MONITOREO_BASE[key] || opt.text;
+        if (key === "") {
+          opt.text = nombreBase;
+        } else {
+          opt.text = `${nombreBase} (${conteos[key] || 0})`;
+        }
+      });
+
+      // Actualizar badge superior
+      if (tipoSeleccionadoActual && conteos[tipoSeleccionadoActual] !== undefined) {
+        labelConteo.textContent = `${conteos[tipoSeleccionadoActual]} pers.`;
+        labelConteo.classList.remove('hidden');
+      } else {
+        labelConteo.classList.add('hidden');
+      }
+    }
+
     function aplicarFiltros() {
       const ffamiliar = document.getElementById('f_ffamiliar').value.trim().toLowerCase();
       
@@ -1074,6 +1174,8 @@
 
       ultimosFiltradosGlobal = filtrados;
       actualizarEstadisticas(filtrados);
+      actualizarEstadisticasSelectorMonitoreo(filtrados);
+      trazarLineasHaciaPacientes(tipoMon);
 
       const gruposCoordenadas = {};
 
@@ -1280,7 +1382,8 @@
 
       document.getElementById('badgeConteo').textContent = `${filtrados.length} Persona(s) (${bounds.length} Puntos)`;
 
-      if (bounds.length > 0) {
+      // Ajustar la cámara global solo si no hay ubicación de usuario detectada
+      if (bounds.length > 0 && !userCurrentCoords) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
       }
     }
