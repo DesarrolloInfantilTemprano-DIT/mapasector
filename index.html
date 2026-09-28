@@ -199,15 +199,15 @@
           <label for="f_tipo_monitoreo" class="block text-[10px] font-bold text-amber-800 uppercase mb-0.5">Tipo de Consulta:</label>
           <select id="f_tipo_monitoreo" onchange="cambiarTipoMonitoreo()" class="w-full px-2 py-1.5 border border-amber-300 rounded text-xs font-bold text-slate-700 bg-white outline-none focus:ring-2 focus:ring-amber-500">
             <option value="">-- Todos los Registros (Vista Global) --</option>
-            <option value="InaCRED">Inasistente CRED (InaCRED)</option>
+            <option value="InaCRED">Inasistente CRED</option>
             <option value="DengueA">Dengue CON signos de Alarma</option>
              <option value="DengueB">Dengue SIN signos de Alarma</option>
-            <option value="InaVAC">Vacunas Pendientes (InaVAC)</option>
-            <option value="Gestante">Gestantes (FPP)</option>
-            <option value="AnemiaInfantil">Niños Anémicos (+7 meses Alta)</option>
-            <option value="PAT">Pacientes TBC (PAT)</option>
-            <option value="HTA">Hipertensos (HTA)</option>
-            <option value="DM">Diabéticos (DM)</option>
+            <option value="InaVAC">Vacunas Pendientes</option>
+            <option value="Gestante">Gestantes</option>
+            <option value="AnemiaInfantil">Niños Anémicos</option>
+            <option value="PAT">Pacientes TBC</option>
+            <option value="HTA">Hipertensos</option>
+            <option value="DM">Diabéticos</option>
           </select>
         </div>
 
@@ -395,13 +395,14 @@
     const NOMBRES_MONITOREO_BASE = {
       "": "-- Todos los Registros (Vista Global) --",
       "InaCRED": "Inasistente CRED (InaCRED)",
-      "InaAnemia": "Inasistente Anemia (InaAnemia)",
-      "InaVAC": "Vacunas Pendientes (InaVAC)",
-      "Gestante": "Gestantes (FPP)",
-      "AnemiaInfantil": "Niños Anémicos (+7 meses Alta)",
-      "PAT": "Pacientes TBC (PAT)",
-      "HTA": "Hipertensos (HTA)",
-      "DM": "Diabéticos (DM)"
+      "DengueA": "Dengue CON señales de alarma",
+      "DengueB": "Dengue SIN señales de alarma",
+      "InaVAC": "Vacunas Pendientes",
+      "Gestante": "Gestantes",
+      "AnemiaInfantil": "Niños Anémicos",
+      "PAT": "Pacientes TBC",
+      "HTA": "Hipertensos",
+      "DM": "Diabéticos"
     };
 
     // ICONOS COLOREADOS SEGÚN RIESGO (Pin SVGs)
@@ -587,7 +588,7 @@
 
     // CARGA INICIAL COMPLETA DE TODAS LAS HOJAS DE MONITOREO
     async function cargarMonitoreoInicialCompleto() {
-      const pestañasMonitoreo = ["Gestante", "AnemiaInfantil", "InaCRED", "InaAnemia", "InaVAC", "HTA", "DM", "PAT"];
+      const pestañasMonitoreo = ["Gestante", "DengueA","DengueB", "InaCRED", "InaAnemia", "InaVAC", "HTA", "DM", "PAT"];
       
       for (const hoja of pestañasMonitoreo) {
         const localMon = localStorage.getItem(`SIGIS_MON_${hoja}`);
@@ -954,7 +955,8 @@
           const valB = datosH[dniStr].valB || "";
           if (hojaKey === "InaVAC") hallazgos.push(`Vacuna Pendiente: ${valB}`);
           else if (hojaKey === "InaCRED") hallazgos.push(`InaCRED: ${valB}`);
-          else if (hojaKey === "InaAnemia") hallazgos.push(`InaAnemia: ${valB}`);
+          else if (hojaKey === "DengueA") hallazgos.push(`Dengue CON señales de alarma: ${valB}`);
+          else if (hojaKey === "DengueB") hallazgos.push(`Dengue SIN señales de alarma: ${valB}`);
           else if (hojaKey === "Gestante") hallazgos.push(`Gestante FPP: ${valB}`);
           else if (hojaKey === "AnemiaInfantil") hallazgos.push(`Niño Anémico (Alta: ${sumarMesesAFecha(valB, 7)})`);
           else hallazgos.push(`${hojaKey}: ${valB || 'Registrado'}`);
@@ -1050,7 +1052,7 @@
       const tipoSeleccionadoActual = selectMonitoreo.value;
 
       const conteos = {
-        "InaCRED": 0, "InaAnemia": 0, "InaVAC": 0, "Gestante": 0,
+        "InaCRED": 0, "DengueA": 0,"DengueB": 0, "InaVAC": 0, "Gestante": 0,
         "AnemiaInfantil": 0, "PAT": 0, "HTA": 0, "DM": 0
       };
 
@@ -1240,7 +1242,8 @@
           if (baseMonitoreo["Gestante"] && baseMonitoreo["Gestante"][ingDni]) grupoTieneGestante = true;
           if (baseMonitoreo["AnemiaInfantil"] && baseMonitoreo["AnemiaInfantil"][ingDni]) grupoTieneRiesgoAlto = true;
           if (baseMonitoreo["InaCRED"] && baseMonitoreo["InaCRED"][ingDni]) grupoTieneRiesgoAlto = true;
-          if (baseMonitoreo["InaAnemia"] && baseMonitoreo["InaAnemia"][ingDni]) grupoTieneRiesgoAlto = true;
+          if (baseMonitoreo["DengueA"] && baseMonitoreo["DengueA"][ingDni]) grupoTieneRiesgoAlto = true;
+          if (baseMonitoreo["DengueB"] && baseMonitoreo["DengueB"][ingDni]) grupoTieneRiesgoAlto = true;
           if (baseMonitoreo["InaVAC"] && baseMonitoreo["InaVAC"][ingDni]) grupoTieneRiesgoAlto = true;
           if (baseMonitoreo["HTA"] && baseMonitoreo["HTA"][ingDni]) grupoTieneCronico = true;
           if (baseMonitoreo["DM"] && baseMonitoreo["DM"][ingDni]) grupoTieneCronico = true;
