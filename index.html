@@ -963,8 +963,12 @@
           else if (hojaKey === "DengueA") hallazgos.push(`Dengue CON señales de alarma: ${valB}`);
           else if (hojaKey === "DengueB") hallazgos.push(`Dengue SIN señales de alarma: ${valB}`);
           else if (hojaKey === "Gestante") hallazgos.push(`Gestante FPP: ${valB}`);
-          else if (hojaKey === "AnemiaInfantil") hallazgos.push(`Niño Anémico (Alta: ${sumarMesesAFecha(valB, 7)})`);
-          else hallazgos.push(`${hojaKey}: ${valB || 'Registrado'}`);
+// ⚠️ CAMBIA ESTA LÍNEA EXACTA:
+      else if (hojaKey === "AnemiaInfantil") {
+        const fechaCalculadaAlta = sumarMesesAFecha(valB, 7);
+        hallazgos.push(`Niño Anémico (Alta: ${fechaCalculadaAlta})`);
+      }      
+      else hallazgos.push(`${hojaKey}: ${valB || 'Registrado'}`);          
         }
       });
 
