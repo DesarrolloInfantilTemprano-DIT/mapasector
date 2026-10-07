@@ -588,7 +588,7 @@
 
     // CARGA INICIAL COMPLETA DE TODAS LAS HOJAS DE MONITOREO
     async function cargarMonitoreoInicialCompleto() {
-      const pestañasMonitoreo = ["Gestante", "DengueA","DengueB", "InaCRED", "InaAnemia", "InaVAC", "HTA", "DM", "PAT"];
+      const pestañasMonitoreo = ["Gestante", "DengueA","DengueB", "InaCRED", "InaAnemia", "AnemiaInfantil","InaVAC", "HTA", "DM", "PAT"];
       
       for (const hoja of pestañasMonitoreo) {
         const localMon = localStorage.getItem(`SIGIS_MON_${hoja}`);
