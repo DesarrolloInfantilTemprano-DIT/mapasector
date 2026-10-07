@@ -816,15 +816,20 @@
 
       return `${anios} años, ${meses} meses, ${dias} días`;
     }
-
-    function sumarMesesAFecha(strFecha, mesesASumar = 7) {
-      const d = parseFechaPeruana(strFecha);
-      if (!d) return strFecha || '-';
-      d.setMonth(d.getMonth() + mesesASumar);
-      const dia = String(d.getDate()).padStart(2, '0');
-      const mes = String(d.getMonth() + 1).padStart(2, '0');
-      const anio = d.getFullYear();
-      return `${dia}/${mes}/${anio}`;
+      function sumarMesesAFecha(strFecha, mesesASumar = 7) {
+  if (!strFecha || strFecha === "---" || strFecha.trim() === "") return '-';
+  
+  // Limpiar espacios o formato extra
+  const fechaLimpia = strFecha.toString().trim();
+  const d = parseFechaPeruana(fechaLimpia);
+  
+  if (!d || isNaN(d.getTime())) return '-';
+  
+  d.setMonth(d.getMonth() + mesesASumar);
+  const dia = String(d.getDate()).padStart(2, '0');
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const anio = d.getFullYear();
+  return `${dia}/${mes}/${anio}`;
     }
 
     function diasHastaFecha(strFecha) {
