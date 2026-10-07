@@ -588,7 +588,7 @@
 
     // CARGA INICIAL COMPLETA DE TODAS LAS HOJAS DE MONITOREO
     async function cargarMonitoreoInicialCompleto() {
-      const pestañasMonitoreo = ["Gestante", "DengueA","DengueB", "InaCRED", "InaAnemia", "AnemiaInfantil","InaVAC", "HTA", "DM", "PAT"];
+      const pestañasMonitoreo = ["Gestante", "DengueA","DengueB", "InaCRED", "AnemiaInfantil", "InaVAC", "HTA", "DM", "PAT"];
       
       for (const hoja of pestañasMonitoreo) {
         const localMon = localStorage.getItem(`SIGIS_MON_${hoja}`);
@@ -601,14 +601,23 @@
 
       for (const hoja of pestañasMonitoreo) {
         try {
-          const response = await fetch(`${URL_MONITOREO}?action=obtenerMonitoreo&hoja=${encodeURIComponent(hoja)}`);
+          // Si es AnemiaInfantil, usar la acción correcta del script si aplica o el endpoint de monitoreo
+          const actionParam = (hoja === "AnemiaInfantil") ? "obtenerMonitoreo&hoja=AnemiaInfantil" : `obtenerMonitoreo&hoja=${encodeURIComponent(hoja)}`;
+          const response = await fetch(`${URL_MONITOREO}?action=${actionParam}`);
           const result = await response.json();
           if (result && result.status === "ok") {
             baseMonitoreo[hoja] = {};
             (result.data || []).forEach(row => {
               const dniStr = row.dni ? row.dni.toString().trim() : "";
               if (dniStr) {
-                baseMonitoreo[hoja][dniStr] = { valB: row.valB || "", valC: row.valC || "" };
+                if (hoja === "AnemiaInfantil") {
+                  baseMonitoreo[hoja][dniStr] = {
+                    meses: row.meses || [],
+                    nombres: row.nombres || ""
+                  };
+                } else {
+                  baseMonitoreo[hoja][dniStr] = { valB: row.valB || "", valC: row.valC || "" };
+                }
               }
             });
             try { localStorage.setItem(`SIGIS_MON_${hoja}`, JSON.stringify(baseMonitoreo[hoja])); } catch(e){}
@@ -627,7 +636,8 @@
       }
       document.getElementById('badgeConteo').textContent = `Cargando ${hojaNombre}...`;
       try {
-        const response = await fetch(`${URL_MONITOREO}?action=obtenerMonitoreo&hoja=${encodeURIComponent(hojaNombre)}`);
+        const actionParam = (hojaNombre === "AnemiaInfantil") ? "obtenerMonitoreo&hoja=AnemiaInfantil" : `obtenerMonitoreo&hoja=${encodeURIComponent(hojaNombre)}`;
+        const response = await fetch(`${URL_MONITOREO}?action=${actionParam}`);
         const result = await response.json();
 
         if (result && result.status === "ok") {
@@ -635,10 +645,17 @@
           (result.data || []).forEach(row => {
             const dniStr = row.dni ? row.dni.toString().trim() : "";
             if (dniStr) {
-              baseMonitoreo[hojaNombre][dniStr] = {
-                valB: row.valB || "",
-                valC: row.valC || ""
-              };
+              if (hojaNombre === "AnemiaInfantil") {
+                baseMonitoreo[hojaNombre][dniStr] = {
+                  meses: row.meses || [],
+                  nombres: row.nombres || ""
+                };
+              } else {
+                baseMonitoreo[hojaNombre][dniStr] = {
+                  valB: row.valB || "",
+                  valC: row.valC || ""
+                };
+              }
             }
           });
           try { localStorage.setItem(`SIGIS_MON_${hojaNombre}`, JSON.stringify(baseMonitoreo[hojaNombre])); } catch(e){}
@@ -816,20 +833,20 @@
 
       return `${anios} años, ${meses} meses, ${dias} días`;
     }
-      function sumarMesesAFecha(strFecha, mesesASumar = 7) {
-  if (!strFecha || strFecha === "---" || strFecha.trim() === "") return '-';
-  
-  // Limpiar espacios o formato extra
-  const fechaLimpia = strFecha.toString().trim();
-  const d = parseFechaPeruana(fechaLimpia);
-  
-  if (!d || isNaN(d.getTime())) return '-';
-  
-  d.setMonth(d.getMonth() + mesesASumar);
-  const dia = String(d.getDate()).padStart(2, '0');
-  const mes = String(d.getMonth() + 1).padStart(2, '0');
-  const anio = d.getFullYear();
-  return `${dia}/${mes}/${anio}`;
+
+    function sumarMesesAFecha(strFecha, mesesASumar = 7) {
+      if (!strFecha || strFecha === "---" || strFecha.trim() === "") return '-';
+      
+      const fechaLimpia = strFecha.toString().trim();
+      const d = parseFechaPeruana(fechaLimpia);
+      
+      if (!d || isNaN(d.getTime())) return '-';
+      
+      d.setMonth(d.getMonth() + mesesASumar);
+      const dia = String(d.getDate()).padStart(2, '0');
+      const mes = String(d.getMonth() + 1).padStart(2, '0');
+      const anio = d.getFullYear();
+      return `${dia}/${mes}/${anio}`;
     }
 
     function diasHastaFecha(strFecha) {
@@ -858,13 +875,11 @@
             zIndexOffset: 3000
           }).addTo(map).bindPopup("<b>📍 Tu Ubicación Actual</b>");
           
-          // Solo hacer primer enfoque suave si es la primera lectura
           map.setView([lat, lng], 17);
         } else {
           userGpsMarker.setLatLng([lat, lng]);
         }
         
-        // Redibujar líneas hacia pacientes si hay un monitoreo activo
         const tipoMon = document.getElementById('f_tipo_monitoreo').value;
         if (tipoMon) {
           trazarLineasHaciaPacientes(tipoMon);
@@ -873,14 +888,11 @@
 
       const manejarErrorGps = (err) => {
         console.log("Error GPS:", err.message);
-        // Si falla por alta precisión en móviles, intentar modo estándar (celular)
         navigator.geolocation.getCurrentPosition(manejarUbicacionExitosa, (e) => console.log("GPS Fallback:", e), { enableHighAccuracy: false, timeout: 15000 });
       };
 
-      // Iniciar intento de lectura GPS
       navigator.geolocation.getCurrentPosition(manejarUbicacionExitosa, manejarErrorGps, { enableHighAccuracy: true, timeout: 10000 });
 
-      // Rastreo continuo
       navigator.geolocation.watchPosition(manejarUbicacionExitosa, manejarErrorGps, {
         enableHighAccuracy: true,
         maximumAge: 3000,
@@ -957,18 +969,21 @@
       Object.keys(baseMonitoreo).forEach(hojaKey => {
         const datosH = baseMonitoreo[hojaKey];
         if (datosH && datosH[dniStr]) {
-          const valB = datosH[dniStr].valB || "";
-          if (hojaKey === "InaVAC") hallazgos.push(`Vacuna Pendiente: ${valB}`);
-          else if (hojaKey === "InaCRED") hallazgos.push(`InaCRED: ${valB}`);
-          else if (hojaKey === "DengueA") hallazgos.push(`Dengue CON señales de alarma: ${valB}`);
-          else if (hojaKey === "DengueB") hallazgos.push(`Dengue SIN señales de alarma: ${valB}`);
-          else if (hojaKey === "Gestante") hallazgos.push(`Gestante FPP: ${valB}`);
-// ⚠️ CAMBIA ESTA LÍNEA EXACTA:
-      else if (hojaKey === "AnemiaInfantil") {
-        const fechaCalculadaAlta = sumarMesesAFecha(valB, 7);
-        hallazgos.push(`Niño Anémico (Alta: ${fechaCalculadaAlta})`);
-      }      
-      else hallazgos.push(`${hojaKey}: ${valB || 'Registrado'}`);          
+          const reg = datosH[dniStr];
+          
+          if (hojaKey === "AnemiaInfantil") {
+            const fechaMes1 = (reg.meses && reg.meses[0]) ? reg.meses[0] : (reg.valB || "");
+            const fechaCalculadaAlta = sumarMesesAFecha(fechaMes1, 7);
+            hallazgos.push(`Niño Anémico (Alta: ${fechaCalculadaAlta})`);
+          } else {
+            const valB = reg.valB || "";
+            if (hojaKey === "InaVAC") hallazgos.push(`Vacuna Pendiente: ${valB}`);
+            else if (hojaKey === "InaCRED") hallazgos.push(`InaCRED: ${valB}`);
+            else if (hojaKey === "DengueA") hallazgos.push(`Dengue CON señales de alarma: ${valB}`);
+            else if (hojaKey === "DengueB") hallazgos.push(`Dengue SIN señales de alarma: ${valB}`);
+            else if (hojaKey === "Gestante") hallazgos.push(`Gestante FPP: ${valB}`);
+            else hallazgos.push(`${hojaKey}: ${valB || 'Registrado'}`);
+          }
         }
       });
 
@@ -1016,7 +1031,6 @@
       XLSX.writeFile(workbook, `SIGIS_FED_Monitoreo_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // TRAZAR LÍNEAS DESDE LA CRUZ ROJA (GPS) HACIA CADA FAMILIA / PACIENTE FILTRADO
     function trazarLineasHaciaPacientes(tipoMonitoreo) {
       linesLayer.clearLayers();
       if (!tipoMonitoreo || !userCurrentCoords || !ultimosFiltradosGlobal || ultimosFiltradosGlobal.length === 0) return;
@@ -1036,10 +1050,9 @@
             if (!pAtendidos.has(coordKey)) {
               pAtendidos.add(coordKey);
 
-              // Determinar color de línea según condición
-              let colorLinea = "#ef4444"; // Rojo por defecto
-              if (tipoMonitoreo === "Gestante") colorLinea = "#800020"; // Guinda
-              else if (tipoMonitoreo === "HTA" || tipoMonitoreo === "DM") colorLinea = "#f59e0b"; // Amarillo
+              let colorLinea = "#ef4444"; 
+              if (tipoMonitoreo === "Gestante") colorLinea = "#800020"; 
+              else if (tipoMonitoreo === "HTA" || tipoMonitoreo === "DM") colorLinea = "#f59e0b"; 
 
               const polyline = L.polyline([userCurrentCoords, [lat, lng]], {
                 color: colorLinea,
@@ -1054,7 +1067,6 @@
       });
     }
 
-    // RECALCULAR Y MOSTRAR ESTADÍSTICA DENTRO DEL COMBO SELECT DEL MÓDULO MONITOREO
     function actualizarEstadisticasSelectorMonitoreo(baseFiltradaActual) {
       const selectMonitoreo = document.getElementById('f_tipo_monitoreo');
       const labelConteo = document.getElementById('labelConteoMonitoreo');
@@ -1076,7 +1088,6 @@
         });
       });
 
-      // Actualizar opciones del Select con cantidad entre paréntesis Ejm: Gestantes (FPP) (5)
       Array.from(selectMonitoreo.options).forEach(opt => {
         const key = opt.value;
         const nombreBase = NOMBRES_MONITOREO_BASE[key] || opt.text;
@@ -1087,7 +1098,6 @@
         }
       });
 
-      // Actualizar badge superior
       if (tipoSeleccionadoActual && conteos[tipoSeleccionadoActual] !== undefined) {
         labelConteo.textContent = `${conteos[tipoSeleccionadoActual]} pers.`;
         labelConteo.classList.remove('hidden');
@@ -1319,7 +1329,8 @@
             if (resumenMon.includes("Niño Anémico")) {
               const regM = baseMonitoreo["AnemiaInfantil"][ingDni];
               if (regM) {
-                const fechaAlta = sumarMesesAFecha(regM.valB, 7);
+                const fechaBaseAnemia = (regM.meses && regM.meses[0]) ? regM.meses[0] : (regM.valB || "");
+                const fechaAlta = sumarMesesAFecha(fechaBaseAnemia, 7);
                 const diasFaltantes = diasHastaFecha(fechaAlta);
                 if (diasFaltantes !== null && diasFaltantes <= 30 && diasFaltantes >= 0) {
                   htmlAlertaUrgente = `<p class="text-[10px] bg-red-600 text-white font-extrabold p-1 rounded shadow animate-pulse">⚡ ALERTA: Alta Próxima (${diasFaltantes} días)</p>`;
@@ -1395,7 +1406,6 @@
 
       document.getElementById('badgeConteo').textContent = `${filtrados.length} Persona(s) (${bounds.length} Puntos)`;
 
-      // Ajustar la cámara global solo si no hay ubicación de usuario detectada
       if (bounds.length > 0 && !userCurrentCoords) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
       }
